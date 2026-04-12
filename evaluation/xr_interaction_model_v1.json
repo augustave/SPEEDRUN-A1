@@ -1,0 +1,34 @@
+{
+  "prototype_id": "SPEEDRUN-A1-EVAL-20260412",
+  "narrative_theme": "Signal Wake",
+  "prototype_scope": "Project evaluation with speculative XR spatialization plan",
+  "interaction_params": {
+    "primary_input": "Gaze dwell on oversized lane markers",
+    "secondary_input": "Controller trigger or low-fatigue pinch confirmation",
+    "feedback_state": "Focus ring + depth pulse + wake contraction + logo state shift",
+    "ui_scale_factor": 1.3,
+    "dwell_time_ms": 450
+  },
+  "runtime_targets": {
+    "min_frame_rate_fps": 72,
+    "max_interaction_latency_ms": 120
+  },
+  "simulation_disclosure": {
+    "contains_mocked_data": true,
+    "contains_speculative_motion": true,
+    "validated_in_engine": [
+      "2D browser render loop",
+      "pointer-reactive visual turbulence",
+      "burst-triggered flash, shake, and warp surge",
+      "asset preload overlay"
+    ],
+    "not_validated_in_engine": [
+      "gaze dwell selection",
+      "controller confirmation",
+      "spatial depth comfort",
+      "XR scene navigation",
+      "semantic telemetry mapping"
+    ]
+  },
+  "genai_workflow_log": "No new generation stack was run during evaluation. Existing still images were treated as inherited assets; local review used source inspection, HTTP serving, and browser screenshot capture."
+}

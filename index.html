@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>a16z / speedrun</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { overflow: hidden; background: #000; width: 100%; height: 100%; }
+    canvas { display: block; }
+    #loader { position: fixed; inset: 0; background: #000; display: flex; align-items: center; justify-content: center; z-index: 9999; transition: opacity 0.6s; flex-direction: column; gap: 16px; }
+    #loader.gone { opacity: 0; pointer-events: none; }
+    #loader .t { color: rgba(255,255,255,0.3); font-family: 'Helvetica Neue', sans-serif; font-size: 10px; letter-spacing: 5px; }
+    #loader .bw { width: 160px; height: 2px; background: rgba(255,255,255,0.08); }
+    #loader .bf { height: 100%; width: 0%; background: #00E5CC; transition: width 0.2s; }
+  </style>
+</head>
+<body>
+  <div id="loader"><div class="t">LOADING</div><div class="bw"><div class="bf" id="lb"></div></div></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <script>
+  // ═══════════════════════════════════════════════════
+  // a16z / speedrun — VELOCITY v3
+  // ═══════════════════════════════════════════════════
+
+  let logo, logoW;
+  let bgs = [];
+  const bgF = [
+    'A_digitally_manipulated_202604121320.png',
+    'An_aerial_view_202604121315.png',
+    'An_aerial_view_202604121324.png',
+    'An_aerial,_long-exposure_202604121327.png',
+    'Inviting_the_impression_202604121323.png'
+  ];
+
+  // State
+  let mv = 0, smv = 0;
+  let curBg = 0, nxtBg = 1, bgT = 0, bgFade = false;
+  let flash = 0;
+  let globalPulse = 0;
+  let shakeX = 0, shakeY = 0;
+  let warpSpeed = 1; // multiplier, surges on click
+
+  // ── WARP TUNNEL (radial streaks from center) ──
+  const WARP_COUNT = 120;
+  let warps = [];
+
+  // ── HORIZONTAL SPEED LINES (foreground + background layers) ──
+  const SL_BG = 40, SL_FG = 30;
+  let linesBg = [], linesFg = [];
+
+  // ── PARTICLES ──
+  const P_MAX = 500;
+  let parts = [], pIdx = 0;
+
+  // ── EMITTERS ──
+  let emits = [];
+
+  // ── ENERGY WEB ──
+  const N_CT = 24;
+  let nodes = [], nNeigh = [], pulses = [];
+
+  // ── GLITCH ──
+  let glitchT = 0, glitchD = 0, glitching = false, nxtGlitch = 90;
+
+  // ── LOGO ECHOES (afterimage trail) ──
+  let logoEchoes = [];
+
+  // Colors
+  const CR = [255, 40, 40], CT = [0, 229, 204], CW = [255, 255, 255], CP = [255, 50, 180];
+
+  let ld = 0;
+  function onLd() { ld++; let b = document.getElementById('lb'); if (b) b.style.width = (ld/6*100)+'%'; }
+
+  function preload() {
+    logo = loadImage('logo.png', onLd);
+    for (let i = 0; i < bgF.length; i++) bgs[i] = loadImage(bgF[i], onLd);
+  }
+
+  // ═══════════════════════════════════════════════════
+  function setup() {
+    createCanvas(windowWidth, windowHeight);
+    pixelDensity(1);
+    imageMode(CENTER);
+    rectMode(CENTER);
+
+    // Logo inversion: black-on-white → white-on-transparent
+    logoW = logo.get();
+    logoW.loadPixels();
+    for (let i = 0; i < logoW.pixels.length; i += 4) {
+      let br = (logoW.pixels[i] + logoW.pixels[i+1] + logoW.pixels[i+2]) / 3;
+      let oa = logoW.pixels[i+3] / 255;
+      logoW.pixels[i] = logoW.pixels[i+1] = logoW.pixels[i+2] = 255;
+      logoW.pixels[i+3] = Math.round((1 - br/255) * oa * 255);
+    }
+    logoW.updatePixels();
+
+    // Warp tunnel streaks
+    for (let i = 0; i < WARP_COUNT; i++) warps.push(mkWarp());
+
+    // Speed lines (two depth layers)
+    for (let i = 0; i < SL_BG; i++) linesBg.push(mkLine(true, 0.3));
+    for (let i = 0; i < SL_FG; i++) linesFg.push(mkLine(true, 1.0));
+
+    // Particles
+    for (let i = 0; i < P_MAX; i++)
+      parts.push({on:false, x:0,y:0,vx:0,vy:0,life:0,ml:0,r:0,g:0,b:0,sz:0,tx:[],ty:[]});
+
+    // Emitters (5 curved paths)
+    for (let i = 0; i < 5; i++) emits.push(mkEmit());
+
+    // Web nodes
+    for (let i = 0; i < N_CT; i++)
+      nodes.push({x:random(width),y:random(height),vx:random(-0.4,0.4),vy:random(-0.4,0.4),bx:random(width),by:random(height)});
+    cacheN();
+
+    // Hide loader
+    setTimeout(() => { let el = document.getElementById('loader'); if(el){el.classList.add('gone'); setTimeout(()=>el.style.display='none',600);} }, 300);
+  }
+
+  // ═══════════════════════════════════════════════════
+  // FACTORIES
+  // ═══════════════════════════════════════════════════
+  function mkWarp() {
+    let a = random(TWO_PI);
+    let d = random(5, 30);
+    return { angle: a, dist: d, speed: random(3, 12), len: random(20, 80),
+      r: random([CR,CT,CW,CP]), alpha: random(40, 160) };
+  }
+
+  function mkLine(rndX, depth) {
+    let c = random();
+    let r,g,b;
+    if (c<0.35){r=255;g=255;b=255;} else if(c<0.6){r=CR[0];g=CR[1];b=CR[2];}
+    else if(c<0.8){r=CT[0];g=CT[1];b=CT[2];} else{r=CP[0];g=CP[1];b=CP[2];}
+    return { x: rndX ? random(width) : width+random(50,300), y: random(height),
+      spd: random(6,20)*depth, len: random(60,400)*depth, th: random(0.5,3)*depth,
+      a: random(30,130)*depth, r,g,b, depth };
+  }
+
+  function mkEmit() {
+    let sy = random(height*0.15, height*0.85);
+    return { t:random(1), spd:random(0.003,0.008), cs:random(1),
+      p0:{x:-100,y:sy}, p1:{x:width*0.25,y:sy+random(-250,250)},
+      p2:{x:width*0.75,y:sy+random(-250,250)}, p3:{x:width+100,y:random(height*0.15,height*0.85)} };
+  }
+
+  function bez(a,b,c,d,t){let m=1-t,m2=m*m,m3=m2*m,t2=t*t,t3=t2*t;
+    return{x:m3*a.x+3*m2*t*b.x+3*m*t2*c.x+t3*d.x,y:m3*a.y+3*m2*t*b.y+3*m*t2*c.y+t3*d.y};}
+
+  function spawn(x,y,vx,vy,r,g,b,sz,life){
+    let p=parts[pIdx]; p.on=true;p.x=x;p.y=y;p.vx=vx;p.vy=vy;
+    p.life=life;p.ml=life;p.r=r;p.g=g;p.b=b;p.sz=sz;p.tx=[x];p.ty=[y];
+    pIdx=(pIdx+1)%P_MAX;}
+
+  function cacheN(){nNeigh=[];for(let i=0;i<nodes.length;i++){let ds=[];
+    for(let j=0;j<nodes.length;j++){if(i===j)continue;ds.push({idx:j,d:dist(nodes[i].x,nodes[i].y,nodes[j].x,nodes[j].y)});}
+    ds.sort((a,b)=>a.d-b.d);nNeigh.push([ds[0].idx,ds[1].idx,ds[2].idx]);}}
+
+  function imgCov(img,cx,cy,w,h){let iw=img.width,ih=img.height,s=max(w/iw,h/ih),
+    sw=w/s,sh=h/s,sx=(iw-sw)/2,sy=(ih-sh)/2;image(img,cx,cy,w,h,sx,sy,sw,sh);}
+
+  // ═══════════════════════════════════════════════════
+  // DRAW
+  // ═══════════════════════════════════════════════════
+  function draw() {
+    try {
+      mv = dist(mouseX,mouseY,pmouseX,pmouseY);
+      smv = lerp(smv, mv, 0.12);
+      globalPulse = sin(frameCount * 0.04) * 0.5 + 0.5;
+      warpSpeed = lerp(warpSpeed, 1, 0.03); // decay back to 1
+      shakeX = lerp(shakeX, 0, 0.1);
+      shakeY = lerp(shakeY, 0, 0.1);
+
+      push();
+      translate(shakeX, shakeY);
+
+      // L0: Deep black
+      blendMode(BLEND);
+      background(4, 4, 8);
+
+      // L1: Background image (with zoom pulse)
+      blendMode(BLEND);
+      layerBg();
+
+      // L2: Warp tunnel (radial speed streaks)
+      blendMode(ADD);
+      layerWarp();
+
+      // L3: Background speed lines (far layer, slow)
+      blendMode(ADD);
+      layerLines(linesBg);
+
+      // L4: Particles
+      blendMode(ADD);
+      layerEmitters();
+      layerParticles();
+
+      // L5: Energy web
+      blendMode(ADD);
+      layerWeb();
+
+      // L6: Foreground speed lines (near layer, fast)
+      blendMode(ADD);
+      layerLines(linesFg);
+
+      // L7: Logo with echoes
+      blendMode(BLEND);
+      layerLogo();
+
+      // L8: Vignette + atmosphere
+      blendMode(BLEND);
+      layerVignette();
+
+      pop();
+
+      // Flash overlay (outside translate so it covers everything)
+      if (flash > 0) {
+        blendMode(ADD);
+        noStroke(); fill(255,255,255,flash);
+        rect(width/2,height/2,width*1.2,height*1.2);
+        flash *= 0.82;
+        if (flash < 1) flash = 0;
+        blendMode(BLEND);
+      }
+    } catch(e) { console.error('draw:', e); }
+  }
+
+  // ═══════════════════════════════════════════════════
+  // L1: BACKGROUND IMAGES (fast transition + zoom pulse)
+  // ═══════════════════════════════════════════════════
+  function layerBg() {
+    push(); imageMode(CENTER);
+    let px = map(mouseX,0,width,15,-15);
+    let py = map(mouseY,0,height,8,-8);
+    // Zoom pulse: slight scale oscillation
+    let zp = 1 + globalPulse * 0.02 + (warpSpeed - 1) * 0.05;
+
+    bgT++;
+    let show = 300, fade = 60; // faster: 5s show, 1s fade
+
+    if (bgT > show && !bgFade) bgFade = true;
+    if (bgFade) {
+      let f = constrain((bgT-show)/fade, 0, 1);
+      if (f >= 1) { curBg=nxtBg; nxtBg=(nxtBg+1)%bgs.length; bgT=0; bgFade=false; f=0; }
+      tint(255, 120*(1-f));
+      imgCov(bgs[curBg], width/2+px, height/2+py, (width+60)*zp, (height+30)*zp);
+      tint(255, 120*f);
+      imgCov(bgs[nxtBg], width/2+px, height/2+py, (width+60)*zp, (height+30)*zp);
+    } else {
+      tint(255, 120);
+      imgCov(bgs[curBg], width/2+px, height/2+py, (width+60)*zp, (height+30)*zp);
+    }
+    noTint(); pop();
+  }
+
+  // ═══════════════════════════════════════════════════
+  // L2: WARP TUNNEL (radial speed streaks from center)
+  // ═══════════════════════════════════════════════════
+  function layerWarp() {
+    let cx = width/2, cy = height/2;
+    let ws = warpSpeed * (1 + smv * 0.02);
+
+    for (let w of warps) {
+      w.dist += w.speed * ws;
+      let maxD = max(width, height) * 0.8;
+      if (w.dist > maxD) { Object.assign(w, mkWarp()); }
+
+      let x1 = cx + cos(w.angle) * w.dist;
+      let y1 = cy + sin(w.angle) * w.dist;
+      let x2 = cx + cos(w.angle) * (w.dist + w.len * ws);
+      let y2 = cy + sin(w.angle) * (w.dist + w.len * ws);
+
+      let fade = map(w.dist, 5, maxD * 0.5, 0.3, 1, true);
+      let a = w.alpha * fade * min(ws, 2);
+      let thickness = map(w.dist, 5, maxD, 0.5, 2.5);
+
+      stroke(w.r[0], w.r[1], w.r[2], a);
+      strokeWeight(thickness);
+      line(x1, y1, x2, y2);
+    }
+    noStroke();
+  }
+
+  // ═══════════════════════════════════════════════════
+  // L3/L6: SPEED LINES (two depth layers)
+  // ═══════════════════════════════════════════════════
+  function layerLines(arr) {
+    let boost = map(smv, 0, 30, 1, 2.5, true) * warpSpeed;
+    for (let i = 0; i < arr.length; i++) {
+      let s = arr[i];
+      s.x -= s.spd * boost;
+      if (s.x + s.len < 0) { arr[i] = mkLine(false, s.depth); continue; }
+      stroke(s.r, s.g, s.b, s.a);
+      strokeWeight(s.th);
+      line(s.x, s.y, s.x + s.len, s.y);
+    }
+    noStroke();
+  }
+
+  // ═══════════════════════════════════════════════════
+  // L4: PARTICLES
+  // ═══════════════════════════════════════════════════
+  function layerEmitters() {
+    for (let e of emits) {
+      e.t += e.spd * warpSpeed;
+      if (e.t > 1) { Object.assign(e, mkEmit()); e.t = 0; }
+      let pos = bez(e.p0,e.p1,e.p2,e.p3, e.t);
+      let nxt = bez(e.p0,e.p1,e.p2,e.p3, min(e.t+0.01,1));
+      let ang = atan2(nxt.y-pos.y, nxt.x-pos.x);
+      for (let j = 0; j < 3; j++) {
+        let sp=random(-0.4,0.4), spd=random(1,3.5);
+        let r,g,b;
+        if(e.cs<0.5){r=CR[0]+random(-20,20);g=CR[1]+random(-10,40);b=CR[2];}
+        else if(e.cs<0.8){r=CT[0];g=CT[1]+random(-20,20);b=CT[2]+random(-20,20);}
+        else{r=CP[0];g=CP[1]+random(-20,20);b=CP[2];}
+        spawn(pos.x+random(-4,4),pos.y+random(-4,4),cos(ang+sp)*spd,sin(ang+sp)*spd,r,g,b,random(3,8),floor(random(50,100)));
+      }
+    }
+    // Mouse emitter (more aggressive)
+    if (smv > 1.5) {
+      let rate = floor(map(smv, 1.5, 40, 2, 8, true));
+      for (let i = 0; i < rate; i++) {
+        let a = atan2(mouseY-pmouseY,mouseX-pmouseX)+PI+random(-0.6,0.6);
+        let c = random()<0.4?CR:(random()<0.6?CT:CP);
+        spawn(mouseX+random(-8,8),mouseY+random(-8,8),cos(a)*random(1.5,5),sin(a)*random(1.5,5),
+          c[0],c[1],c[2],random(3,7),floor(random(30,70)));
+      }
+    }
+  }
+
+  function layerParticles() {
+    noStroke();
+    for (let p of parts) {
+      if (!p.on) continue;
+      p.x+=p.vx; p.y+=p.vy; p.vx*=0.985; p.vy*=0.985; p.life--;
+      if (p.life<=0){p.on=false;continue;}
+      p.tx.push(p.x);p.ty.push(p.y);
+      if(p.tx.length>8){p.tx.shift();p.ty.shift();}
+      let lr=p.life/p.ml;
+      // Trail (thicker, brighter)
+      if(p.tx.length>1){noFill();
+        for(let t=1;t<p.tx.length;t++){
+          let ta=(t/p.tx.length)*lr*220;
+          stroke(p.r,p.g,p.b,ta);
+          strokeWeight(p.sz*lr*(t/p.tx.length)*1.5);
+          line(p.tx[t-1],p.ty[t-1],p.tx[t],p.ty[t]);
+        }noStroke();}
+      // Head glow
+      fill(p.r,p.g,p.b,lr*255);
+      ellipse(p.x,p.y,p.sz*lr*1.5,p.sz*lr*1.5);
+      // Soft outer glow
+      fill(p.r,p.g,p.b,lr*60);
+      ellipse(p.x,p.y,p.sz*lr*4,p.sz*lr*4);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════
+  // L5: ENERGY WEB
+  // ═══════════════════════════════════════════════════
+  function layerWeb() {
+    for(let n of nodes){
+      n.x+=n.vx;n.y+=n.vy;
+      n.vx+=(n.bx-n.x)*0.0004;n.vy+=(n.by-n.y)*0.0004;
+      let dm=dist(n.x,n.y,mouseX,mouseY);
+      if(dm<280){let f=map(dm,0,280,0.1,0);n.vx+=(mouseX-n.x)*f*0.012;n.vy+=(mouseY-n.y)*f*0.012;}
+      n.vx*=0.97;n.vy*=0.97;
+      if(n.x<-60){n.x=width+60;n.bx=n.x;}if(n.x>width+60){n.x=-60;n.bx=n.x;}
+      if(n.y<-60){n.y=height+60;n.by=n.y;}if(n.y>height+60){n.y=-60;n.by=n.y;}
+    }
+    if(frameCount%120===0)cacheN();
+
+    // Connections
+    strokeWeight(1);
+    for(let i=0;i<nodes.length;i++){let n=nodes[i];
+      for(let k=0;k<3;k++){let j=nNeigh[i][k],o=nodes[j];
+        let d=dist(n.x,n.y,o.x,o.y);if(d>400)continue;
+        let a=map(d,0,400,80,5);
+        let mx=(n.x+o.x)/2,my=(n.y+o.y)/2,dm=dist(mx,my,mouseX,mouseY);
+        if(dm<220)a*=map(dm,0,220,3,1);
+        stroke(CT[0],CT[1],CT[2],a);line(n.x,n.y,o.x,o.y);}}
+
+    // Nodes (bigger, brighter)
+    noStroke();
+    for(let n of nodes){let dm=dist(n.x,n.y,mouseX,mouseY);
+      let a=dm<220?map(dm,0,220,180,35):35;
+      let s=dm<220?map(dm,0,220,7,2.5):2.5;
+      fill(CT[0],CT[1],CT[2],a);ellipse(n.x,n.y,s,s);
+      fill(CT[0],CT[1],CT[2],a*0.3);ellipse(n.x,n.y,s*3,s*3);}
+
+    // Pulses
+    if(frameCount%60===0&&pulses.length<8){let fi=floor(random(nodes.length)),ti=nNeigh[fi][0];
+      if(dist(nodes[fi].x,nodes[fi].y,nodes[ti].x,nodes[ti].y)<400)pulses.push({fi,ti,t:0});}
+    for(let i=pulses.length-1;i>=0;i--){let p=pulses[i];p.t+=0.04;
+      if(p.t>1){pulses.splice(i,1);continue;}
+      let px=lerp(nodes[p.fi].x,nodes[p.ti].x,p.t),py=lerp(nodes[p.fi].y,nodes[p.ti].y,p.t);
+      let pa=sin(p.t*PI)*255;noStroke();
+      fill(CT[0],CT[1],CT[2],pa);ellipse(px,py,5,5);
+      fill(CT[0],CT[1],CT[2],pa*0.3);ellipse(px,py,16,16);}
+  }
+
+  // ═══════════════════════════════════════════════════
+  // L7: LOGO (echoes + chromatic aberration + glitch)
+  // ═══════════════════════════════════════════════════
+  function layerLogo() {
+    push(); imageMode(CENTER);
+
+    let sc = min(width*0.42/logoW.width, 650/logoW.width);
+    let lw = logoW.width*sc, lh = logoW.height*sc;
+    let px = map(mouseX,0,width,-12,12);
+    let py = map(mouseY,0,height,-6,6);
+    let cx = width/2+px, cy = height/2+py;
+
+    // ── Logo motion echoes (afterimage trail) ──
+    // Store position history
+    if (frameCount % 3 === 0) {
+      logoEchoes.push({ x: cx, y: cy, age: 0 });
+      if (logoEchoes.length > 5) logoEchoes.shift();
+    }
+    // Draw echoes (fading afterimages)
+    for (let e of logoEchoes) {
+      e.age++;
+      let ea = map(e.age, 0, 15, 40, 0, true);
+      if (ea <= 0) continue;
+      let eOff = e.age * 0.8;
+      tint(CT[0], CT[1], CT[2], ea);
+      image(logoW, e.x - eOff, e.y, lw, lh);
+    }
+
+    // ── Glow (pulsing, tied to warp) ──
+    let ga = (20 + globalPulse * 30) * min(warpSpeed, 1.5);
+    noStroke();
+    fill(CT[0], CT[1], CT[2], ga * 0.4);
+    ellipse(cx, cy, lw * 0.9, lh * 3);
+    fill(CT[0], CT[1], CT[2], ga * 0.2);
+    ellipse(cx, cy, lw * 1.3, lh * 5);
+
+    // ── Chromatic aberration (stronger) ──
+    let ca = 3 + sin(frameCount*0.025)*1.5 + min(smv*0.2, 8) + (warpSpeed-1)*4;
+
+    // ── Glitch ──
+    glitchT++;
+    if(glitchT>=nxtGlitch&&!glitching){glitching=true;glitchD=floor(random(4,8));glitchT=0;}
+    if(glitching){glitchD--;if(glitchD<=0){glitching=false;nxtGlitch=floor(random(60,200));glitchT=0;}}
+
+    if (glitching) {
+      let sl=floor(random(6,12)), sh=lh/sl;
+      for(let s=0;s<sl;s++){
+        let ox=random(-20,20);
+        let sy=cy-lh/2+s*sh, srcY=s*(logoW.height/sl), srcH=logoW.height/sl;
+        tint(255,0,0,200);image(logoW,cx+ox-ca*2.5,sy+sh/2,lw,sh,0,srcY,logoW.width,srcH);
+        tint(0,255,0,200);image(logoW,cx+ox,sy+sh/2,lw,sh,0,srcY,logoW.width,srcH);
+        tint(0,120,255,200);image(logoW,cx+ox+ca*2.5,sy+sh/2,lw,sh,0,srcY,logoW.width,srcH);
+        tint(255,255,255,250);image(logoW,cx+ox*0.2,sy+sh/2,lw,sh,0,srcY,logoW.width,srcH);
+      }
+    } else {
+      tint(255,20,20,120); image(logoW, cx-ca, cy, lw, lh);
+      tint(0,255,0,120); image(logoW, cx, cy, lw, lh);
+      tint(40,100,255,120); image(logoW, cx+ca, cy, lw, lh);
+      tint(255,255,255,255); image(logoW, cx, cy, lw, lh);
+    }
+    noTint(); pop();
+  }
+
+  // ═══════════════════════════════════════════════════
+  // L8: VIGNETTE + ATMOSPHERE
+  // ═══════════════════════════════════════════════════
+  function layerVignette() {
+    let ctx = drawingContext;
+    ctx.save();
+
+    // Radial vignette (dark edges, cinematic)
+    let grd = ctx.createRadialGradient(width/2, height/2, width*0.25, width/2, height/2, width*0.75);
+    grd.addColorStop(0, 'rgba(0,0,0,0)');
+    grd.addColorStop(0.6, 'rgba(0,0,0,0.15)');
+    grd.addColorStop(1, 'rgba(0,0,0,0.65)');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, width, height);
+
+    // Subtle scanlines
+    ctx.strokeStyle = 'rgba(0,0,0,0.03)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let y = 0; y < height; y += 4) { ctx.moveTo(0,y); ctx.lineTo(width,y); }
+    ctx.stroke();
+
+    // Chromatic edge tint (red left, blue right)
+    let eL = ctx.createLinearGradient(0,0,width*0.08,0);
+    eL.addColorStop(0, 'rgba(255,30,30,0.08)');
+    eL.addColorStop(1, 'rgba(255,30,30,0)');
+    ctx.fillStyle = eL;
+    ctx.fillRect(0,0,width*0.08,height);
+
+    let eR = ctx.createLinearGradient(width,0,width*0.92,0);
+    eR.addColorStop(0, 'rgba(30,80,255,0.08)');
+    eR.addColorStop(1, 'rgba(30,80,255,0)');
+    ctx.fillStyle = eR;
+    ctx.fillRect(width*0.92,0,width*0.08,height);
+
+    ctx.restore();
+  }
+
+  // ═══════════════════════════════════════════════════
+  // INTERACTION
+  // ═══════════════════════════════════════════════════
+  function mousePressed() { burst(mouseX,mouseY); return false; }
+  function touchStarted() { if(touches.length>0)burst(touches[0].x,touches[0].y); return false; }
+
+  function burst(bx, by) {
+    flash = 60;
+    warpSpeed = 3.5; // surge!
+    shakeX = random(-12, 12);
+    shakeY = random(-8, 8);
+    // Big burst
+    for (let i = 0; i < 80; i++) {
+      let a=random(TWO_PI), spd=random(3,12);
+      let c = random()<0.4?CR:(random()<0.6?CT:CP);
+      spawn(bx,by,cos(a)*spd,sin(a)*spd,c[0],c[1],c[2],random(3,9),floor(random(30,80)));
+    }
+    // Trigger glitch
+    glitching = true;
+    glitchD = floor(random(5, 12));
+  }
+
+  function windowResized() {
+    resizeCanvas(windowWidth, windowHeight);
+    for(let n of nodes){n.bx=random(width);n.by=random(height);}
+    cacheN();
+  }
+  </script>
+</body>
+</html>
