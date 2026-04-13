@@ -5,22 +5,243 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>a16z / speedrun</title>
   <style>
+    :root { --accent-rgb: 0, 229, 204; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { overflow: hidden; background: #000; width: 100%; height: 100%; }
+    html, body {
+      overflow: hidden;
+      background: #000;
+      width: 100%;
+      height: 100%;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      color: #fff;
+    }
     canvas { display: block; }
-    #loader { position: fixed; inset: 0; background: #000; display: flex; align-items: center; justify-content: center; z-index: 9999; transition: opacity 0.6s; flex-direction: column; gap: 16px; }
+    #loader {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      transition: opacity 0.6s;
+      flex-direction: column;
+      gap: 16px;
+    }
     #loader.gone { opacity: 0; pointer-events: none; }
-    #loader .t { color: rgba(255,255,255,0.3); font-family: 'Helvetica Neue', sans-serif; font-size: 10px; letter-spacing: 5px; }
+    #loader .t {
+      color: rgba(255,255,255,0.3);
+      font-size: 10px;
+      letter-spacing: 5px;
+    }
     #loader .bw { width: 160px; height: 2px; background: rgba(255,255,255,0.08); }
-    #loader .bf { height: 100%; width: 0%; background: #00E5CC; transition: width 0.2s; }
+    #loader .bf { height: 100%; width: 0%; background: rgb(var(--accent-rgb)); transition: width 0.2s; }
+    .hud {
+      position: fixed;
+      inset: 0;
+      z-index: 12;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 24px;
+      pointer-events: none;
+    }
+    .panel {
+      width: min(420px, calc(100vw - 48px));
+      padding: 18px 18px 16px;
+      border: 1px solid rgba(var(--accent-rgb), 0.28);
+      background:
+        linear-gradient(180deg, rgba(8, 10, 18, 0.84), rgba(8, 10, 18, 0.44)),
+        radial-gradient(circle at top left, rgba(var(--accent-rgb), 0.16), transparent 55%);
+      backdrop-filter: blur(16px);
+      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
+    }
+    .eyebrow {
+      font-size: 10px;
+      letter-spacing: 3.2px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.58);
+      margin-bottom: 10px;
+    }
+    .panel h1 {
+      font-size: clamp(28px, 4vw, 42px);
+      line-height: 0.96;
+      letter-spacing: -0.04em;
+      max-width: 9ch;
+      margin-bottom: 12px;
+    }
+    .panel p {
+      color: rgba(255,255,255,0.72);
+      font-size: 14px;
+      line-height: 1.55;
+      max-width: 34ch;
+    }
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 18px;
+    }
+    .metric {
+      padding-top: 10px;
+      border-top: 1px solid rgba(255,255,255,0.12);
+    }
+    .metric span {
+      display: block;
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.48);
+      margin-bottom: 4px;
+    }
+    .metric strong {
+      display: block;
+      font-size: 12px;
+      line-height: 1.4;
+      color: rgba(255,255,255,0.96);
+      font-weight: 600;
+    }
+    .lane-wrap {
+      width: min(1120px, calc(100vw - 48px));
+      margin: 0 auto;
+    }
+    .lane-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 12px;
+      color: rgba(255,255,255,0.62);
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    .lane-header strong {
+      color: rgba(255,255,255,0.86);
+      font-weight: 600;
+      letter-spacing: 2.6px;
+    }
+    .lane-nav {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      pointer-events: auto;
+    }
+    .lane {
+      position: relative;
+      padding: 15px 16px 16px;
+      text-align: left;
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.14);
+      background:
+        linear-gradient(180deg, rgba(10,12,20,0.78), rgba(10,12,20,0.45)),
+        radial-gradient(circle at top left, rgba(var(--accent-rgb), 0.08), transparent 58%);
+      backdrop-filter: blur(14px);
+      cursor: pointer;
+      transition: transform 0.2s, border-color 0.2s, background 0.2s, box-shadow 0.2s;
+      min-height: 110px;
+    }
+    .lane:hover,
+    .lane:focus-visible {
+      transform: translateY(-3px);
+      border-color: rgba(var(--accent-rgb), 0.62);
+      box-shadow: 0 18px 40px rgba(0,0,0,0.26);
+      outline: none;
+    }
+    .lane.is-active {
+      border-color: rgba(var(--accent-rgb), 0.88);
+      background:
+        linear-gradient(180deg, rgba(10,12,20,0.84), rgba(10,12,20,0.52)),
+        radial-gradient(circle at top left, rgba(var(--accent-rgb), 0.2), transparent 60%);
+    }
+    .lane.is-preview:not(.is-active) {
+      border-color: rgba(var(--accent-rgb), 0.46);
+      background:
+        linear-gradient(180deg, rgba(10,12,20,0.8), rgba(10,12,20,0.48)),
+        radial-gradient(circle at top left, rgba(var(--accent-rgb), 0.13), transparent 60%);
+    }
+    .lane-num {
+      display: block;
+      font-size: 10px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.48);
+      margin-bottom: 10px;
+    }
+    .lane-label {
+      display: block;
+      font-size: 18px;
+      line-height: 1.04;
+      letter-spacing: -0.03em;
+      margin-bottom: 8px;
+    }
+    .lane-caption {
+      display: block;
+      color: rgba(255,255,255,0.66);
+      font-size: 12px;
+      line-height: 1.45;
+      max-width: 22ch;
+    }
+    .legend {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 12px;
+      padding: 8px 12px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(9, 10, 16, 0.42);
+      color: rgba(255,255,255,0.58);
+      font-size: 11px;
+      letter-spacing: 1.6px;
+      text-transform: uppercase;
+    }
+    .legend b {
+      color: rgba(255,255,255,0.88);
+      font-weight: 600;
+    }
+    @media (max-width: 860px) {
+      .hud { padding: 16px; }
+      .panel { width: min(100%, 520px); }
+      .metrics { grid-template-columns: 1fr; }
+      .lane-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .lane-header { flex-direction: column; align-items: flex-start; }
+    }
+    @media (max-width: 560px) {
+      .lane-nav { grid-template-columns: 1fr; }
+      .lane { min-height: auto; }
+      .panel h1 { max-width: 11ch; }
+    }
   </style>
 </head>
 <body>
   <div id="loader"><div class="t">LOADING</div><div class="bw"><div class="bf" id="lb"></div></div></div>
+
+  <div class="hud" id="hud">
+    <section class="panel" aria-live="polite">
+      <div class="eyebrow" id="sceneKicker">Lane 01 • Live</div>
+      <h1 id="sceneTitle">Ignition Window</h1>
+      <p id="sceneDetail">Establish the lane. Motion compresses around the mark until the user commits the next state.</p>
+      <div class="metrics">
+        <div class="metric"><span>State</span><strong id="sceneMode">Live</strong></div>
+        <div class="metric"><span>Commit</span><strong id="sceneCommit">Click a lane or press 1-4</strong></div>
+        <div class="metric"><span>Input</span><strong id="sceneInput">Move, click, arrows, enter</strong></div>
+      </div>
+      <div class="legend"><span>Canvas burst</span><b>Click anywhere</b><span>Lane commit</span><b>1-4</b></div>
+    </section>
+
+    <section class="lane-wrap" aria-label="Signal wake navigation">
+      <div class="lane-header">
+        <strong>Signal Wake</strong>
+        <span id="laneHint">Preview by hovering. Commit by clicking or pressing Enter.</span>
+      </div>
+      <div class="lane-nav" id="laneNav" role="tablist" aria-label="Signal wake lanes"></div>
+    </section>
+  </div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
   <script>
   // ═══════════════════════════════════════════════════
-  // a16z / speedrun — VELOCITY v3
+  // a16z / speedrun — SIGNAL WAKE
   // ═══════════════════════════════════════════════════
 
   let logo, logoW;
@@ -33,13 +254,139 @@
     'Inviting_the_impression_202604121323.png'
   ];
 
+  const LANES = [
+    {
+      id: 'ignition',
+      number: '01',
+      label: 'Ignition Window',
+      caption: 'Establish the lane before the system commits.',
+      detail: 'The system holds pressure and exposes the lane markers. Motion stays restrained until you deliberately move the story forward.',
+      accent: [0, 229, 204],
+      bgIndex: 4,
+      baseWarp: 0.88,
+      lineBoost: 0.82,
+      emitterBoost: 0.74,
+      nodeReach: 160,
+      webAlpha: 0.42,
+      pulseEvery: 105,
+      pulseSpeed: 0.028,
+      logoShiftX: -0.06,
+      logoShiftY: 0.02,
+      logoScale: 0.96,
+      bgAlpha: 95,
+      bgZoom: 1.02,
+      lanePull: 0.00016,
+      glitchMin: 150,
+      glitchMax: 260,
+      commitText: 'Stage the lane'
+    },
+    {
+      id: 'signal',
+      number: '02',
+      label: 'Signal Scan',
+      caption: 'Reveal the web and read the field.',
+      detail: 'The network brightens and pulse traffic increases. The frame shifts from atmosphere toward readable system activity.',
+      accent: [0, 229, 204],
+      bgIndex: 1,
+      baseWarp: 1.02,
+      lineBoost: 1.02,
+      emitterBoost: 1.0,
+      nodeReach: 235,
+      webAlpha: 0.82,
+      pulseEvery: 60,
+      pulseSpeed: 0.043,
+      logoShiftX: -0.01,
+      logoShiftY: -0.02,
+      logoScale: 0.92,
+      bgAlpha: 112,
+      bgZoom: 1.04,
+      lanePull: 0.00022,
+      glitchMin: 120,
+      glitchMax: 200,
+      commitText: 'Read the field'
+    },
+    {
+      id: 'decision',
+      number: '03',
+      label: 'Decision Node',
+      caption: 'Tighten the web and make room for consequence.',
+      detail: 'The mark shifts off center, the graph contracts, and the scene starts to read like a choice architecture instead of an ambient ident.',
+      accent: [255, 50, 180],
+      bgIndex: 2,
+      baseWarp: 1.14,
+      lineBoost: 1.15,
+      emitterBoost: 1.14,
+      nodeReach: 285,
+      webAlpha: 0.96,
+      pulseEvery: 44,
+      pulseSpeed: 0.058,
+      logoShiftX: -0.18,
+      logoShiftY: -0.05,
+      logoScale: 0.84,
+      bgAlpha: 118,
+      bgZoom: 1.06,
+      lanePull: 0.00028,
+      glitchMin: 90,
+      glitchMax: 160,
+      commitText: 'Commit the node'
+    },
+    {
+      id: 'launch',
+      number: '04',
+      label: 'Launch Burst',
+      caption: 'Open the corridor and release the pressure.',
+      detail: 'Wake lines lengthen, the lane rail surges, and the frame translates commitment into forward thrust rather than decorative motion.',
+      accent: [255, 40, 40],
+      bgIndex: 3,
+      baseWarp: 1.38,
+      lineBoost: 1.42,
+      emitterBoost: 1.35,
+      nodeReach: 220,
+      webAlpha: 0.68,
+      pulseEvery: 36,
+      pulseSpeed: 0.07,
+      logoShiftX: 0.15,
+      logoShiftY: 0.04,
+      logoScale: 0.9,
+      bgAlpha: 126,
+      bgZoom: 1.08,
+      lanePull: 0.00018,
+      glitchMin: 68,
+      glitchMax: 124,
+      commitText: 'Release the burst'
+    }
+  ];
+
   // State
   let mv = 0, smv = 0;
-  let curBg = 0, nxtBg = 1, bgT = 0, bgFade = false;
   let flash = 0;
   let globalPulse = 0;
   let shakeX = 0, shakeY = 0;
-  let warpSpeed = 1; // multiplier, surges on click
+  let burstWarp = 1;
+  let activeLaneIndex = 0;
+  let focusLaneIndex = null;
+  let currentBgIndex = LANES[0].bgIndex;
+  let targetBgIndex = LANES[0].bgIndex;
+  let bgBlend = 1;
+  let laneTravel = null;
+  let logoEchoes = [];
+
+  const sceneMotion = {
+    accent: [...LANES[0].accent],
+    baseWarp: LANES[0].baseWarp,
+    lineBoost: LANES[0].lineBoost,
+    emitterBoost: LANES[0].emitterBoost,
+    nodeReach: LANES[0].nodeReach,
+    webAlpha: LANES[0].webAlpha,
+    pulseEvery: LANES[0].pulseEvery,
+    pulseSpeed: LANES[0].pulseSpeed,
+    logoShiftX: LANES[0].logoShiftX,
+    logoShiftY: LANES[0].logoShiftY,
+    logoScale: LANES[0].logoScale,
+    bgAlpha: LANES[0].bgAlpha,
+    bgZoom: LANES[0].bgZoom,
+    lanePull: LANES[0].lanePull
+  };
 
   // ── WARP TUNNEL (radial streaks from center) ──
   const WARP_COUNT = 120;
@@ -61,210 +408,358 @@
   let nodes = [], nNeigh = [], pulses = [];
 
   // ── GLITCH ──
-  let glitchT = 0, glitchD = 0, glitching = false, nxtGlitch = 90;
+  let glitchT = 0, glitchD = 0, glitching = false, nxtGlitch = 130;
 
-  // ── LOGO ECHOES (afterimage trail) ──
-  let logoEchoes = [];
+  // UI
+  let hud = {};
 
   // Colors
   const CR = [255, 40, 40], CT = [0, 229, 204], CW = [255, 255, 255], CP = [255, 50, 180];
 
   let ld = 0;
-  function onLd() { ld++; let b = document.getElementById('lb'); if (b) b.style.width = (ld/6*100)+'%'; }
+  function onLd() { ld++; let b = document.getElementById('lb'); if (b) b.style.width = (ld / 6 * 100) + '%'; }
 
   function preload() {
     logo = loadImage('logo.png', onLd);
     for (let i = 0; i < bgF.length; i++) bgs[i] = loadImage(bgF[i], onLd);
   }
 
-  // ═══════════════════════════════════════════════════
   function setup() {
     createCanvas(windowWidth, windowHeight);
     pixelDensity(1);
     imageMode(CENTER);
     rectMode(CENTER);
 
-    // Logo inversion: black-on-white → white-on-transparent
     logoW = logo.get();
     logoW.loadPixels();
     for (let i = 0; i < logoW.pixels.length; i += 4) {
-      let br = (logoW.pixels[i] + logoW.pixels[i+1] + logoW.pixels[i+2]) / 3;
-      let oa = logoW.pixels[i+3] / 255;
-      logoW.pixels[i] = logoW.pixels[i+1] = logoW.pixels[i+2] = 255;
-      logoW.pixels[i+3] = Math.round((1 - br/255) * oa * 255);
+      let br = (logoW.pixels[i] + logoW.pixels[i + 1] + logoW.pixels[i + 2]) / 3;
+      let oa = logoW.pixels[i + 3] / 255;
+      logoW.pixels[i] = logoW.pixels[i + 1] = logoW.pixels[i + 2] = 255;
+      logoW.pixels[i + 3] = Math.round((1 - br / 255) * oa * 255);
     }
     logoW.updatePixels();
 
-    // Warp tunnel streaks
     for (let i = 0; i < WARP_COUNT; i++) warps.push(mkWarp());
-
-    // Speed lines (two depth layers)
     for (let i = 0; i < SL_BG; i++) linesBg.push(mkLine(true, 0.3));
     for (let i = 0; i < SL_FG; i++) linesFg.push(mkLine(true, 1.0));
-
-    // Particles
-    for (let i = 0; i < P_MAX; i++)
-      parts.push({on:false, x:0,y:0,vx:0,vy:0,life:0,ml:0,r:0,g:0,b:0,sz:0,tx:[],ty:[]});
-
-    // Emitters (5 curved paths)
+    for (let i = 0; i < P_MAX; i++) {
+      parts.push({ on: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, ml: 0, r: 0, g: 0, b: 0, sz: 0, tx: [], ty: [] });
+    }
     for (let i = 0; i < 5; i++) emits.push(mkEmit());
-
-    // Web nodes
-    for (let i = 0; i < N_CT; i++)
-      nodes.push({x:random(width),y:random(height),vx:random(-0.4,0.4),vy:random(-0.4,0.4),bx:random(width),by:random(height)});
+    for (let i = 0; i < N_CT; i++) {
+      nodes.push({ x: random(width), y: random(height), vx: random(-0.4, 0.4), vy: random(-0.4, 0.4), bx: random(width), by: random(height) });
+    }
     cacheN();
+    setupHud();
+    applyHudAccent(LANES[0]);
+    syncHud();
 
-    // Hide loader
-    setTimeout(() => { let el = document.getElementById('loader'); if(el){el.classList.add('gone'); setTimeout(()=>el.style.display='none',600);} }, 300);
+    setTimeout(() => {
+      let el = document.getElementById('loader');
+      if (el) {
+        el.classList.add('gone');
+        setTimeout(() => { el.style.display = 'none'; }, 600);
+      }
+    }, 300);
   }
 
-  // ═══════════════════════════════════════════════════
-  // FACTORIES
-  // ═══════════════════════════════════════════════════
+  function setupHud() {
+    hud.kicker = document.getElementById('sceneKicker');
+    hud.title = document.getElementById('sceneTitle');
+    hud.detail = document.getElementById('sceneDetail');
+    hud.mode = document.getElementById('sceneMode');
+    hud.commit = document.getElementById('sceneCommit');
+    hud.input = document.getElementById('sceneInput');
+    hud.laneHint = document.getElementById('laneHint');
+    hud.nav = document.getElementById('laneNav');
+
+    LANES.forEach((lane, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'lane';
+      button.dataset.index = index;
+      button.setAttribute('role', 'tab');
+      button.setAttribute('aria-selected', index === activeLaneIndex ? 'true' : 'false');
+      button.innerHTML = `
+        <span class="lane-num">${lane.number}</span>
+        <span class="lane-label">${lane.label}</span>
+        <span class="lane-caption">${lane.caption}</span>
+      `;
+      button.addEventListener('mouseenter', () => previewLane(index));
+      button.addEventListener('mouseleave', () => clearPreviewLane(index));
+      button.addEventListener('focus', () => previewLane(index));
+      button.addEventListener('blur', () => clearPreviewLane(index));
+      button.addEventListener('click', () => activateLane(index));
+      hud.nav.appendChild(button);
+    });
+  }
+
+  function previewLane(index) {
+    focusLaneIndex = index;
+    syncHud();
+  }
+
+  function clearPreviewLane(index) {
+    if (focusLaneIndex === index) {
+      focusLaneIndex = null;
+      syncHud();
+    }
+  }
+
+  function activateLane(index) {
+    if (index < 0 || index >= LANES.length) return;
+    const prev = activeLaneIndex;
+    activeLaneIndex = index;
+    focusLaneIndex = null;
+    targetBgIndex = LANES[index].bgIndex;
+    if (currentBgIndex !== targetBgIndex) bgBlend = 0;
+    nxtGlitch = floor(random(LANES[index].glitchMin, LANES[index].glitchMax));
+
+    if (prev !== index) {
+      laneTravel = { from: prev, to: index, t: 0 };
+      const pt = lanePoint(index);
+      burst(pt.x, pt.y, 0.75);
+    } else {
+      const pt = lanePoint(index);
+      burst(pt.x, pt.y, 0.4);
+    }
+
+    syncHud();
+  }
+
+  function syncHud() {
+    const displayIndex = focusLaneIndex !== null ? focusLaneIndex : activeLaneIndex;
+    const displayLane = LANES[displayIndex];
+    const live = focusLaneIndex === null;
+
+    applyHudAccent(displayLane);
+    hud.kicker.textContent = `${displayLane.number} • ${live ? 'Live' : 'Preview'}`;
+    hud.title.textContent = displayLane.label;
+    hud.detail.textContent = displayLane.detail;
+    hud.mode.textContent = live ? 'Committed' : 'Previewing';
+    hud.commit.textContent = live ? displayLane.commitText : `Press Enter to commit ${displayLane.number}`;
+    hud.input.textContent = 'Move, click, arrows, enter';
+    hud.laneHint.textContent = live
+      ? 'Preview by hovering. Commit by clicking, Enter, or pressing 1-4.'
+      : 'Preview is active. Click or press Enter to commit this lane.';
+
+    Array.from(hud.nav.children).forEach((button, index) => {
+      button.classList.toggle('is-active', index === activeLaneIndex);
+      button.classList.toggle('is-preview', focusLaneIndex === index);
+      button.setAttribute('aria-selected', index === activeLaneIndex ? 'true' : 'false');
+    });
+  }
+
+  function applyHudAccent(lane) {
+    document.documentElement.style.setProperty('--accent-rgb', lane.accent.join(', '));
+  }
+
+  function lanePoint(index) {
+    const spread = min(width * 0.66, 760);
+    const startX = width / 2 - spread / 2;
+    const step = LANES.length > 1 ? spread / (LANES.length - 1) : 0;
+    const y = height - min(118, height * 0.16);
+    return { x: startX + step * index, y };
+  }
+
+  function updateSceneMotion() {
+    const lane = LANES[activeLaneIndex];
+    sceneMotion.baseWarp = lerp(sceneMotion.baseWarp, lane.baseWarp, 0.06);
+    sceneMotion.lineBoost = lerp(sceneMotion.lineBoost, lane.lineBoost, 0.06);
+    sceneMotion.emitterBoost = lerp(sceneMotion.emitterBoost, lane.emitterBoost, 0.06);
+    sceneMotion.nodeReach = lerp(sceneMotion.nodeReach, lane.nodeReach, 0.06);
+    sceneMotion.webAlpha = lerp(sceneMotion.webAlpha, lane.webAlpha, 0.06);
+    sceneMotion.pulseEvery = lerp(sceneMotion.pulseEvery, lane.pulseEvery, 0.08);
+    sceneMotion.pulseSpeed = lerp(sceneMotion.pulseSpeed, lane.pulseSpeed, 0.08);
+    sceneMotion.logoShiftX = lerp(sceneMotion.logoShiftX, lane.logoShiftX, 0.06);
+    sceneMotion.logoShiftY = lerp(sceneMotion.logoShiftY, lane.logoShiftY, 0.06);
+    sceneMotion.logoScale = lerp(sceneMotion.logoScale, lane.logoScale, 0.06);
+    sceneMotion.bgAlpha = lerp(sceneMotion.bgAlpha, lane.bgAlpha, 0.06);
+    sceneMotion.bgZoom = lerp(sceneMotion.bgZoom, lane.bgZoom, 0.06);
+    sceneMotion.lanePull = lerp(sceneMotion.lanePull, lane.lanePull, 0.06);
+    for (let i = 0; i < 3; i++) sceneMotion.accent[i] = lerp(sceneMotion.accent[i], lane.accent[i], 0.08);
+
+    burstWarp = lerp(burstWarp, 1, 0.045);
+    shakeX = lerp(shakeX, 0, 0.1);
+    shakeY = lerp(shakeY, 0, 0.1);
+
+    if (currentBgIndex !== targetBgIndex) {
+      bgBlend = min(bgBlend + 0.024, 1);
+      if (bgBlend >= 1) currentBgIndex = targetBgIndex;
+    }
+
+    if (laneTravel) {
+      laneTravel.t += 0.035;
+      if (laneTravel.t >= 1) laneTravel = null;
+    }
+  }
+
   function mkWarp() {
     let a = random(TWO_PI);
     let d = random(5, 30);
-    return { angle: a, dist: d, speed: random(3, 12), len: random(20, 80),
-      r: random([CR,CT,CW,CP]), alpha: random(40, 160) };
+    return { angle: a, dist: d, speed: random(3, 12), len: random(20, 80), r: random([CR, CT, CW, CP]), alpha: random(40, 160) };
   }
 
   function mkLine(rndX, depth) {
     let c = random();
-    let r,g,b;
-    if (c<0.35){r=255;g=255;b=255;} else if(c<0.6){r=CR[0];g=CR[1];b=CR[2];}
-    else if(c<0.8){r=CT[0];g=CT[1];b=CT[2];} else{r=CP[0];g=CP[1];b=CP[2];}
-    return { x: rndX ? random(width) : width+random(50,300), y: random(height),
-      spd: random(6,20)*depth, len: random(60,400)*depth, th: random(0.5,3)*depth,
-      a: random(30,130)*depth, r,g,b, depth };
+    let r, g, b;
+    if (c < 0.35) { r = 255; g = 255; b = 255; }
+    else if (c < 0.6) { r = CR[0]; g = CR[1]; b = CR[2]; }
+    else if (c < 0.8) { r = CT[0]; g = CT[1]; b = CT[2]; }
+    else { r = CP[0]; g = CP[1]; b = CP[2]; }
+    return {
+      x: rndX ? random(width) : width + random(50, 300),
+      y: random(height),
+      spd: random(6, 20) * depth,
+      len: random(60, 400) * depth,
+      th: random(0.5, 3) * depth,
+      a: random(30, 130) * depth,
+      r, g, b, depth
+    };
   }
 
   function mkEmit() {
-    let sy = random(height*0.15, height*0.85);
-    return { t:random(1), spd:random(0.003,0.008), cs:random(1),
-      p0:{x:-100,y:sy}, p1:{x:width*0.25,y:sy+random(-250,250)},
-      p2:{x:width*0.75,y:sy+random(-250,250)}, p3:{x:width+100,y:random(height*0.15,height*0.85)} };
+    let sy = random(height * 0.15, height * 0.85);
+    return {
+      t: random(1),
+      spd: random(0.003, 0.008),
+      cs: random(1),
+      p0: { x: -100, y: sy },
+      p1: { x: width * 0.25, y: sy + random(-250, 250) },
+      p2: { x: width * 0.75, y: sy + random(-250, 250) },
+      p3: { x: width + 100, y: random(height * 0.15, height * 0.85) }
+    };
   }
 
-  function bez(a,b,c,d,t){let m=1-t,m2=m*m,m3=m2*m,t2=t*t,t3=t2*t;
-    return{x:m3*a.x+3*m2*t*b.x+3*m*t2*c.x+t3*d.x,y:m3*a.y+3*m2*t*b.y+3*m*t2*c.y+t3*d.y};}
+  function bez(a, b, c, d, t) {
+    let m = 1 - t, m2 = m * m, m3 = m2 * m, t2 = t * t, t3 = t2 * t;
+    return {
+      x: m3 * a.x + 3 * m2 * t * b.x + 3 * m * t2 * c.x + t3 * d.x,
+      y: m3 * a.y + 3 * m2 * t * b.y + 3 * m * t2 * c.y + t3 * d.y
+    };
+  }
 
-  function spawn(x,y,vx,vy,r,g,b,sz,life){
-    let p=parts[pIdx]; p.on=true;p.x=x;p.y=y;p.vx=vx;p.vy=vy;
-    p.life=life;p.ml=life;p.r=r;p.g=g;p.b=b;p.sz=sz;p.tx=[x];p.ty=[y];
-    pIdx=(pIdx+1)%P_MAX;}
+  function spawn(x, y, vx, vy, r, g, b, sz, life) {
+    let p = parts[pIdx];
+    p.on = true;
+    p.x = x;
+    p.y = y;
+    p.vx = vx;
+    p.vy = vy;
+    p.life = life;
+    p.ml = life;
+    p.r = r;
+    p.g = g;
+    p.b = b;
+    p.sz = sz;
+    p.tx = [x];
+    p.ty = [y];
+    pIdx = (pIdx + 1) % P_MAX;
+  }
 
-  function cacheN(){nNeigh=[];for(let i=0;i<nodes.length;i++){let ds=[];
-    for(let j=0;j<nodes.length;j++){if(i===j)continue;ds.push({idx:j,d:dist(nodes[i].x,nodes[i].y,nodes[j].x,nodes[j].y)});}
-    ds.sort((a,b)=>a.d-b.d);nNeigh.push([ds[0].idx,ds[1].idx,ds[2].idx]);}}
+  function cacheN() {
+    nNeigh = [];
+    for (let i = 0; i < nodes.length; i++) {
+      let ds = [];
+      for (let j = 0; j < nodes.length; j++) {
+        if (i === j) continue;
+        ds.push({ idx: j, d: dist(nodes[i].x, nodes[i].y, nodes[j].x, nodes[j].y) });
+      }
+      ds.sort((a, b) => a.d - b.d);
+      nNeigh.push([ds[0].idx, ds[1].idx, ds[2].idx]);
+    }
+  }
 
-  function imgCov(img,cx,cy,w,h){let iw=img.width,ih=img.height,s=max(w/iw,h/ih),
-    sw=w/s,sh=h/s,sx=(iw-sw)/2,sy=(ih-sh)/2;image(img,cx,cy,w,h,sx,sy,sw,sh);}
+  function imgCov(img, cx, cy, w, h) {
+    let iw = img.width, ih = img.height, s = max(w / iw, h / ih);
+    let sw = w / s, sh = h / s, sx = (iw - sw) / 2, sy = (ih - sh) / 2;
+    image(img, cx, cy, w, h, sx, sy, sw, sh);
+  }
 
-  // ═══════════════════════════════════════════════════
-  // DRAW
-  // ═══════════════════════════════════════════════════
   function draw() {
     try {
-      mv = dist(mouseX,mouseY,pmouseX,pmouseY);
+      mv = dist(mouseX, mouseY, pmouseX, pmouseY);
       smv = lerp(smv, mv, 0.12);
       globalPulse = sin(frameCount * 0.04) * 0.5 + 0.5;
-      warpSpeed = lerp(warpSpeed, 1, 0.03); // decay back to 1
-      shakeX = lerp(shakeX, 0, 0.1);
-      shakeY = lerp(shakeY, 0, 0.1);
+      updateSceneMotion();
 
       push();
       translate(shakeX, shakeY);
 
-      // L0: Deep black
       blendMode(BLEND);
       background(4, 4, 8);
 
-      // L1: Background image (with zoom pulse)
       blendMode(BLEND);
       layerBg();
 
-      // L2: Warp tunnel (radial speed streaks)
       blendMode(ADD);
       layerWarp();
 
-      // L3: Background speed lines (far layer, slow)
       blendMode(ADD);
-      layerLines(linesBg);
+      layerLines(linesBg, 0.86);
 
-      // L4: Particles
       blendMode(ADD);
       layerEmitters();
       layerParticles();
 
-      // L5: Energy web
       blendMode(ADD);
       layerWeb();
+      layerLaneRail();
 
-      // L6: Foreground speed lines (near layer, fast)
       blendMode(ADD);
-      layerLines(linesFg);
+      layerLines(linesFg, 1.08);
 
-      // L7: Logo with echoes
       blendMode(BLEND);
       layerLogo();
-
-      // L8: Vignette + atmosphere
-      blendMode(BLEND);
       layerVignette();
 
       pop();
 
-      // Flash overlay (outside translate so it covers everything)
       if (flash > 0) {
         blendMode(ADD);
-        noStroke(); fill(255,255,255,flash);
-        rect(width/2,height/2,width*1.2,height*1.2);
+        noStroke();
+        fill(255, 255, 255, flash);
+        rect(width / 2, height / 2, width * 1.2, height * 1.2);
         flash *= 0.82;
         if (flash < 1) flash = 0;
         blendMode(BLEND);
       }
-    } catch(e) { console.error('draw:', e); }
-  }
-
-  // ═══════════════════════════════════════════════════
-  // L1: BACKGROUND IMAGES (fast transition + zoom pulse)
-  // ═══════════════════════════════════════════════════
-  function layerBg() {
-    push(); imageMode(CENTER);
-    let px = map(mouseX,0,width,15,-15);
-    let py = map(mouseY,0,height,8,-8);
-    // Zoom pulse: slight scale oscillation
-    let zp = 1 + globalPulse * 0.02 + (warpSpeed - 1) * 0.05;
-
-    bgT++;
-    let show = 300, fade = 60; // faster: 5s show, 1s fade
-
-    if (bgT > show && !bgFade) bgFade = true;
-    if (bgFade) {
-      let f = constrain((bgT-show)/fade, 0, 1);
-      if (f >= 1) { curBg=nxtBg; nxtBg=(nxtBg+1)%bgs.length; bgT=0; bgFade=false; f=0; }
-      tint(255, 120*(1-f));
-      imgCov(bgs[curBg], width/2+px, height/2+py, (width+60)*zp, (height+30)*zp);
-      tint(255, 120*f);
-      imgCov(bgs[nxtBg], width/2+px, height/2+py, (width+60)*zp, (height+30)*zp);
-    } else {
-      tint(255, 120);
-      imgCov(bgs[curBg], width/2+px, height/2+py, (width+60)*zp, (height+30)*zp);
+    } catch (e) {
+      console.error('draw:', e);
     }
-    noTint(); pop();
   }
 
-  // ═══════════════════════════════════════════════════
-  // L2: WARP TUNNEL (radial speed streaks from center)
-  // ═══════════════════════════════════════════════════
+  function layerBg() {
+    push();
+    imageMode(CENTER);
+    const px = map(mouseX, 0, width, 15, -15);
+    const py = map(mouseY, 0, height, 8, -8);
+    const zp = sceneMotion.bgZoom + globalPulse * 0.018 + (burstWarp - 1) * 0.05;
+    const alpha = sceneMotion.bgAlpha;
+
+    if (currentBgIndex !== targetBgIndex && bgBlend < 1) {
+      tint(255, alpha * (1 - bgBlend));
+      imgCov(bgs[currentBgIndex], width / 2 + px, height / 2 + py, (width + 60) * zp, (height + 30) * zp);
+      tint(255, alpha * bgBlend);
+      imgCov(bgs[targetBgIndex], width / 2 + px, height / 2 + py, (width + 60) * zp, (height + 30) * zp);
+    } else {
+      tint(255, alpha);
+      imgCov(bgs[currentBgIndex], width / 2 + px, height / 2 + py, (width + 60) * zp, (height + 30) * zp);
+    }
+    noTint();
+    pop();
+  }
+
   function layerWarp() {
-    let cx = width/2, cy = height/2;
-    let ws = warpSpeed * (1 + smv * 0.02);
+    const cx = width / 2;
+    const cy = height / 2;
+    const ws = sceneMotion.baseWarp * burstWarp * (1 + smv * 0.018);
 
     for (let w of warps) {
       w.dist += w.speed * ws;
       let maxD = max(width, height) * 0.8;
-      if (w.dist > maxD) { Object.assign(w, mkWarp()); }
+      if (w.dist > maxD) Object.assign(w, mkWarp());
 
       let x1 = cx + cos(w.angle) * w.dist;
       let y1 = cy + sin(w.angle) * w.dist;
@@ -272,59 +767,75 @@
       let y2 = cy + sin(w.angle) * (w.dist + w.len * ws);
 
       let fade = map(w.dist, 5, maxD * 0.5, 0.3, 1, true);
-      let a = w.alpha * fade * min(ws, 2);
+      let a = w.alpha * fade * min(ws, 2.4);
       let thickness = map(w.dist, 5, maxD, 0.5, 2.5);
-
-      stroke(w.r[0], w.r[1], w.r[2], a);
+      stroke(
+        lerp(w.r[0], sceneMotion.accent[0], 0.28),
+        lerp(w.r[1], sceneMotion.accent[1], 0.28),
+        lerp(w.r[2], sceneMotion.accent[2], 0.28),
+        a
+      );
       strokeWeight(thickness);
       line(x1, y1, x2, y2);
     }
     noStroke();
   }
 
-  // ═══════════════════════════════════════════════════
-  // L3/L6: SPEED LINES (two depth layers)
-  // ═══════════════════════════════════════════════════
-  function layerLines(arr) {
-    let boost = map(smv, 0, 30, 1, 2.5, true) * warpSpeed;
+  function layerLines(arr, depthGain) {
+    const boost = map(smv, 0, 30, 1, 2.4, true) * burstWarp * sceneMotion.lineBoost * depthGain;
     for (let i = 0; i < arr.length; i++) {
       let s = arr[i];
       s.x -= s.spd * boost;
       if (s.x + s.len < 0) { arr[i] = mkLine(false, s.depth); continue; }
-      stroke(s.r, s.g, s.b, s.a);
+      stroke(
+        lerp(s.r, sceneMotion.accent[0], 0.18),
+        lerp(s.g, sceneMotion.accent[1], 0.18),
+        lerp(s.b, sceneMotion.accent[2], 0.18),
+        s.a * sceneMotion.lineBoost
+      );
       strokeWeight(s.th);
       line(s.x, s.y, s.x + s.len, s.y);
     }
     noStroke();
   }
 
-  // ═══════════════════════════════════════════════════
-  // L4: PARTICLES
-  // ═══════════════════════════════════════════════════
   function layerEmitters() {
+    const activeLane = LANES[activeLaneIndex];
     for (let e of emits) {
-      e.t += e.spd * warpSpeed;
+      e.t += e.spd * burstWarp * sceneMotion.emitterBoost;
       if (e.t > 1) { Object.assign(e, mkEmit()); e.t = 0; }
-      let pos = bez(e.p0,e.p1,e.p2,e.p3, e.t);
-      let nxt = bez(e.p0,e.p1,e.p2,e.p3, min(e.t+0.01,1));
-      let ang = atan2(nxt.y-pos.y, nxt.x-pos.x);
+      let pos = bez(e.p0, e.p1, e.p2, e.p3, e.t);
+      let nxt = bez(e.p0, e.p1, e.p2, e.p3, min(e.t + 0.01, 1));
+      let ang = atan2(nxt.y - pos.y, nxt.x - pos.x);
       for (let j = 0; j < 3; j++) {
-        let sp=random(-0.4,0.4), spd=random(1,3.5);
-        let r,g,b;
-        if(e.cs<0.5){r=CR[0]+random(-20,20);g=CR[1]+random(-10,40);b=CR[2];}
-        else if(e.cs<0.8){r=CT[0];g=CT[1]+random(-20,20);b=CT[2]+random(-20,20);}
-        else{r=CP[0];g=CP[1]+random(-20,20);b=CP[2];}
-        spawn(pos.x+random(-4,4),pos.y+random(-4,4),cos(ang+sp)*spd,sin(ang+sp)*spd,r,g,b,random(3,8),floor(random(50,100)));
+        let sp = random(-0.4, 0.4), spd = random(1, 3.5) * sceneMotion.emitterBoost;
+        let color = random() < 0.52 ? activeLane.accent : random([CR, CT, CP, CW]);
+        spawn(
+          pos.x + random(-4, 4),
+          pos.y + random(-4, 4),
+          cos(ang + sp) * spd,
+          sin(ang + sp) * spd,
+          color[0], color[1], color[2],
+          random(3, 8),
+          floor(random(50, 100))
+        );
       }
     }
-    // Mouse emitter (more aggressive)
+
     if (smv > 1.5) {
-      let rate = floor(map(smv, 1.5, 40, 2, 8, true));
+      let rate = floor(map(smv, 1.5, 40, 2, 8, true) * sceneMotion.emitterBoost);
       for (let i = 0; i < rate; i++) {
-        let a = atan2(mouseY-pmouseY,mouseX-pmouseX)+PI+random(-0.6,0.6);
-        let c = random()<0.4?CR:(random()<0.6?CT:CP);
-        spawn(mouseX+random(-8,8),mouseY+random(-8,8),cos(a)*random(1.5,5),sin(a)*random(1.5,5),
-          c[0],c[1],c[2],random(3,7),floor(random(30,70)));
+        let a = atan2(mouseY - pmouseY, mouseX - pmouseX) + PI + random(-0.6, 0.6);
+        let color = random() < 0.6 ? activeLane.accent : random([CT, CP, CR]);
+        spawn(
+          mouseX + random(-8, 8),
+          mouseY + random(-8, 8),
+          cos(a) * random(1.5, 5),
+          sin(a) * random(1.5, 5),
+          color[0], color[1], color[2],
+          random(3, 7),
+          floor(random(30, 70))
+        );
       }
     }
   }
@@ -333,198 +844,307 @@
     noStroke();
     for (let p of parts) {
       if (!p.on) continue;
-      p.x+=p.vx; p.y+=p.vy; p.vx*=0.985; p.vy*=0.985; p.life--;
-      if (p.life<=0){p.on=false;continue;}
-      p.tx.push(p.x);p.ty.push(p.y);
-      if(p.tx.length>8){p.tx.shift();p.ty.shift();}
-      let lr=p.life/p.ml;
-      // Trail (thicker, brighter)
-      if(p.tx.length>1){noFill();
-        for(let t=1;t<p.tx.length;t++){
-          let ta=(t/p.tx.length)*lr*220;
-          stroke(p.r,p.g,p.b,ta);
-          strokeWeight(p.sz*lr*(t/p.tx.length)*1.5);
-          line(p.tx[t-1],p.ty[t-1],p.tx[t],p.ty[t]);
-        }noStroke();}
-      // Head glow
-      fill(p.r,p.g,p.b,lr*255);
-      ellipse(p.x,p.y,p.sz*lr*1.5,p.sz*lr*1.5);
-      // Soft outer glow
-      fill(p.r,p.g,p.b,lr*60);
-      ellipse(p.x,p.y,p.sz*lr*4,p.sz*lr*4);
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vx *= 0.985;
+      p.vy *= 0.985;
+      p.life--;
+      if (p.life <= 0) { p.on = false; continue; }
+      p.tx.push(p.x);
+      p.ty.push(p.y);
+      if (p.tx.length > 8) { p.tx.shift(); p.ty.shift(); }
+      let lr = p.life / p.ml;
+      if (p.tx.length > 1) {
+        noFill();
+        for (let t = 1; t < p.tx.length; t++) {
+          let ta = (t / p.tx.length) * lr * 220;
+          stroke(p.r, p.g, p.b, ta);
+          strokeWeight(p.sz * lr * (t / p.tx.length) * 1.5);
+          line(p.tx[t - 1], p.ty[t - 1], p.tx[t], p.ty[t]);
+        }
+        noStroke();
+      }
+      fill(p.r, p.g, p.b, lr * 255);
+      ellipse(p.x, p.y, p.sz * lr * 1.5, p.sz * lr * 1.5);
+      fill(p.r, p.g, p.b, lr * 60);
+      ellipse(p.x, p.y, p.sz * lr * 4, p.sz * lr * 4);
     }
   }
 
-  // ═══════════════════════════════════════════════════
-  // L5: ENERGY WEB
-  // ═══════════════════════════════════════════════════
   function layerWeb() {
-    for(let n of nodes){
-      n.x+=n.vx;n.y+=n.vy;
-      n.vx+=(n.bx-n.x)*0.0004;n.vy+=(n.by-n.y)*0.0004;
-      let dm=dist(n.x,n.y,mouseX,mouseY);
-      if(dm<280){let f=map(dm,0,280,0.1,0);n.vx+=(mouseX-n.x)*f*0.012;n.vy+=(mouseY-n.y)*f*0.012;}
-      n.vx*=0.97;n.vy*=0.97;
-      if(n.x<-60){n.x=width+60;n.bx=n.x;}if(n.x>width+60){n.x=-60;n.bx=n.x;}
-      if(n.y<-60){n.y=height+60;n.by=n.y;}if(n.y>height+60){n.y=-60;n.by=n.y;}
+    const acc = sceneMotion.accent;
+    const anchor = lanePoint(activeLaneIndex);
+
+    for (let n of nodes) {
+      n.x += n.vx;
+      n.y += n.vy;
+      n.vx += (n.bx - n.x) * 0.0004;
+      n.vy += (n.by - n.y) * 0.0004;
+      n.vx += (anchor.x - n.x) * sceneMotion.lanePull;
+      n.vy += (anchor.y - n.y) * sceneMotion.lanePull * 0.42;
+
+      let dm = dist(n.x, n.y, mouseX, mouseY);
+      if (dm < sceneMotion.nodeReach) {
+        let f = map(dm, 0, sceneMotion.nodeReach, 0.095, 0);
+        n.vx += (mouseX - n.x) * f * 0.012;
+        n.vy += (mouseY - n.y) * f * 0.012;
+      }
+
+      n.vx *= 0.97;
+      n.vy *= 0.97;
+      if (n.x < -60) { n.x = width + 60; n.bx = n.x; }
+      if (n.x > width + 60) { n.x = -60; n.bx = n.x; }
+      if (n.y < -60) { n.y = height + 60; n.by = n.y; }
+      if (n.y > height + 60) { n.y = -60; n.by = n.y; }
     }
-    if(frameCount%120===0)cacheN();
+    if (frameCount % 120 === 0) cacheN();
 
-    // Connections
     strokeWeight(1);
-    for(let i=0;i<nodes.length;i++){let n=nodes[i];
-      for(let k=0;k<3;k++){let j=nNeigh[i][k],o=nodes[j];
-        let d=dist(n.x,n.y,o.x,o.y);if(d>400)continue;
-        let a=map(d,0,400,80,5);
-        let mx=(n.x+o.x)/2,my=(n.y+o.y)/2,dm=dist(mx,my,mouseX,mouseY);
-        if(dm<220)a*=map(dm,0,220,3,1);
-        stroke(CT[0],CT[1],CT[2],a);line(n.x,n.y,o.x,o.y);}}
+    for (let i = 0; i < nodes.length; i++) {
+      let n = nodes[i];
+      for (let k = 0; k < 3; k++) {
+        let j = nNeigh[i][k], o = nodes[j];
+        let d = dist(n.x, n.y, o.x, o.y);
+        if (d > 400) continue;
+        let a = map(d, 0, 400, 80, 5) * sceneMotion.webAlpha;
+        let mx = (n.x + o.x) / 2, my = (n.y + o.y) / 2, dm = dist(mx, my, mouseX, mouseY);
+        if (dm < sceneMotion.nodeReach * 0.9) a *= map(dm, 0, sceneMotion.nodeReach * 0.9, 3, 1);
+        stroke(acc[0], acc[1], acc[2], a);
+        line(n.x, n.y, o.x, o.y);
+      }
+    }
 
-    // Nodes (bigger, brighter)
     noStroke();
-    for(let n of nodes){let dm=dist(n.x,n.y,mouseX,mouseY);
-      let a=dm<220?map(dm,0,220,180,35):35;
-      let s=dm<220?map(dm,0,220,7,2.5):2.5;
-      fill(CT[0],CT[1],CT[2],a);ellipse(n.x,n.y,s,s);
-      fill(CT[0],CT[1],CT[2],a*0.3);ellipse(n.x,n.y,s*3,s*3);}
+    for (let n of nodes) {
+      let dm = dist(n.x, n.y, mouseX, mouseY);
+      let a = dm < sceneMotion.nodeReach ? map(dm, 0, sceneMotion.nodeReach, 180, 35) : 35;
+      let s = dm < sceneMotion.nodeReach ? map(dm, 0, sceneMotion.nodeReach, 7, 2.5) : 2.5;
+      fill(acc[0], acc[1], acc[2], a * sceneMotion.webAlpha);
+      ellipse(n.x, n.y, s, s);
+      fill(acc[0], acc[1], acc[2], a * 0.22 * sceneMotion.webAlpha);
+      ellipse(n.x, n.y, s * 3, s * 3);
+    }
 
-    // Pulses
-    if(frameCount%60===0&&pulses.length<8){let fi=floor(random(nodes.length)),ti=nNeigh[fi][0];
-      if(dist(nodes[fi].x,nodes[fi].y,nodes[ti].x,nodes[ti].y)<400)pulses.push({fi,ti,t:0});}
-    for(let i=pulses.length-1;i>=0;i--){let p=pulses[i];p.t+=0.04;
-      if(p.t>1){pulses.splice(i,1);continue;}
-      let px=lerp(nodes[p.fi].x,nodes[p.ti].x,p.t),py=lerp(nodes[p.fi].y,nodes[p.ti].y,p.t);
-      let pa=sin(p.t*PI)*255;noStroke();
-      fill(CT[0],CT[1],CT[2],pa);ellipse(px,py,5,5);
-      fill(CT[0],CT[1],CT[2],pa*0.3);ellipse(px,py,16,16);}
+    const pulseRate = max(20, floor(sceneMotion.pulseEvery));
+    if (frameCount % pulseRate === 0 && pulses.length < 10) {
+      let fi = floor(random(nodes.length)), ti = nNeigh[fi][0];
+      if (dist(nodes[fi].x, nodes[fi].y, nodes[ti].x, nodes[ti].y) < 400) {
+        pulses.push({ fi, ti, t: 0 });
+      }
+    }
+    for (let i = pulses.length - 1; i >= 0; i--) {
+      let p = pulses[i];
+      p.t += sceneMotion.pulseSpeed;
+      if (p.t > 1) { pulses.splice(i, 1); continue; }
+      let px = lerp(nodes[p.fi].x, nodes[p.ti].x, p.t), py = lerp(nodes[p.fi].y, nodes[p.ti].y, p.t);
+      let pa = sin(p.t * PI) * 255 * sceneMotion.webAlpha;
+      noStroke();
+      fill(acc[0], acc[1], acc[2], pa);
+      ellipse(px, py, 5, 5);
+      fill(acc[0], acc[1], acc[2], pa * 0.3);
+      ellipse(px, py, 16, 16);
+    }
   }
 
-  // ═══════════════════════════════════════════════════
-  // L7: LOGO (echoes + chromatic aberration + glitch)
-  // ═══════════════════════════════════════════════════
+  function layerLaneRail() {
+    const acc = sceneMotion.accent;
+    const yLift = sin(frameCount * 0.035) * 2;
+    const pts = LANES.map((_, index) => lanePoint(index));
+    stroke(255, 255, 255, 28);
+    strokeWeight(1.2);
+    noFill();
+    beginShape();
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      curveVertex(p.x, p.y + yLift);
+      if (i === 0 || i === pts.length - 1) curveVertex(p.x, p.y + yLift);
+    }
+    endShape();
+
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      const isActive = i === activeLaneIndex;
+      const isPreview = i === focusLaneIndex;
+      const size = isActive ? 14 : isPreview ? 10 : 7;
+      fill(acc[0], acc[1], acc[2], isActive ? 210 : isPreview ? 120 : 54);
+      ellipse(p.x, p.y + yLift, size, size);
+      fill(acc[0], acc[1], acc[2], isActive ? 70 : 26);
+      ellipse(p.x, p.y + yLift, size * 3.2, size * 3.2);
+    }
+
+    if (laneTravel) {
+      const from = lanePoint(laneTravel.from);
+      const to = lanePoint(laneTravel.to);
+      const x = lerp(from.x, to.x, laneTravel.t);
+      const y = lerp(from.y, to.y, laneTravel.t) + yLift;
+      fill(acc[0], acc[1], acc[2], 220);
+      ellipse(x, y, 10, 10);
+      fill(acc[0], acc[1], acc[2], 60);
+      ellipse(x, y, 28, 28);
+    }
+  }
+
   function layerLogo() {
-    push(); imageMode(CENTER);
+    push();
+    imageMode(CENTER);
 
-    let sc = min(width*0.42/logoW.width, 650/logoW.width);
-    let lw = logoW.width*sc, lh = logoW.height*sc;
-    let px = map(mouseX,0,width,-12,12);
-    let py = map(mouseY,0,height,-6,6);
-    let cx = width/2+px, cy = height/2+py;
+    let sc = min(width * 0.4 / logoW.width, 640 / logoW.width) * sceneMotion.logoScale;
+    let lw = logoW.width * sc, lh = logoW.height * sc;
+    let px = map(mouseX, 0, width, -12, 12);
+    let py = map(mouseY, 0, height, -6, 6);
+    let cx = width / 2 + width * 0.22 * sceneMotion.logoShiftX + px;
+    let cy = height / 2 + height * 0.18 * sceneMotion.logoShiftY + py;
 
-    // ── Logo motion echoes (afterimage trail) ──
-    // Store position history
     if (frameCount % 3 === 0) {
       logoEchoes.push({ x: cx, y: cy, age: 0 });
       if (logoEchoes.length > 5) logoEchoes.shift();
     }
-    // Draw echoes (fading afterimages)
     for (let e of logoEchoes) {
       e.age++;
-      let ea = map(e.age, 0, 15, 40, 0, true);
+      let ea = map(e.age, 0, 15, 44, 0, true);
       if (ea <= 0) continue;
-      let eOff = e.age * 0.8;
-      tint(CT[0], CT[1], CT[2], ea);
+      let eOff = e.age * 0.9;
+      tint(sceneMotion.accent[0], sceneMotion.accent[1], sceneMotion.accent[2], ea);
       image(logoW, e.x - eOff, e.y, lw, lh);
     }
 
-    // ── Glow (pulsing, tied to warp) ──
-    let ga = (20 + globalPulse * 30) * min(warpSpeed, 1.5);
+    let ga = (22 + globalPulse * 28) * min(burstWarp, 1.7);
     noStroke();
-    fill(CT[0], CT[1], CT[2], ga * 0.4);
-    ellipse(cx, cy, lw * 0.9, lh * 3);
-    fill(CT[0], CT[1], CT[2], ga * 0.2);
-    ellipse(cx, cy, lw * 1.3, lh * 5);
+    fill(sceneMotion.accent[0], sceneMotion.accent[1], sceneMotion.accent[2], ga * 0.42);
+    ellipse(cx, cy, lw * 0.9, lh * 3.1);
+    fill(sceneMotion.accent[0], sceneMotion.accent[1], sceneMotion.accent[2], ga * 0.22);
+    ellipse(cx, cy, lw * 1.28, lh * 5);
 
-    // ── Chromatic aberration (stronger) ──
-    let ca = 3 + sin(frameCount*0.025)*1.5 + min(smv*0.2, 8) + (warpSpeed-1)*4;
+    let ca = 3 + sin(frameCount * 0.025) * 1.5 + min(smv * 0.2, 8) + (burstWarp - 1) * 4;
 
-    // ── Glitch ──
     glitchT++;
-    if(glitchT>=nxtGlitch&&!glitching){glitching=true;glitchD=floor(random(4,8));glitchT=0;}
-    if(glitching){glitchD--;if(glitchD<=0){glitching=false;nxtGlitch=floor(random(60,200));glitchT=0;}}
+    if (glitchT >= nxtGlitch && !glitching) {
+      glitching = true;
+      glitchD = floor(random(4, 8));
+      glitchT = 0;
+    }
+    if (glitching) {
+      glitchD--;
+      if (glitchD <= 0) {
+        glitching = false;
+        const activeLane = LANES[activeLaneIndex];
+        nxtGlitch = floor(random(activeLane.glitchMin, activeLane.glitchMax));
+        glitchT = 0;
+      }
+    }
 
     if (glitching) {
-      let sl=floor(random(6,12)), sh=lh/sl;
-      for(let s=0;s<sl;s++){
-        let ox=random(-20,20);
-        let sy=cy-lh/2+s*sh, srcY=s*(logoW.height/sl), srcH=logoW.height/sl;
-        tint(255,0,0,200);image(logoW,cx+ox-ca*2.5,sy+sh/2,lw,sh,0,srcY,logoW.width,srcH);
-        tint(0,255,0,200);image(logoW,cx+ox,sy+sh/2,lw,sh,0,srcY,logoW.width,srcH);
-        tint(0,120,255,200);image(logoW,cx+ox+ca*2.5,sy+sh/2,lw,sh,0,srcY,logoW.width,srcH);
-        tint(255,255,255,250);image(logoW,cx+ox*0.2,sy+sh/2,lw,sh,0,srcY,logoW.width,srcH);
+      let sl = floor(random(6, 12)), sh = lh / sl;
+      for (let s = 0; s < sl; s++) {
+        let ox = random(-20, 20);
+        let sy = cy - lh / 2 + s * sh, srcY = s * (logoW.height / sl), srcH = logoW.height / sl;
+        tint(255, 0, 0, 200); image(logoW, cx + ox - ca * 2.5, sy + sh / 2, lw, sh, 0, srcY, logoW.width, srcH);
+        tint(0, 255, 0, 200); image(logoW, cx + ox, sy + sh / 2, lw, sh, 0, srcY, logoW.width, srcH);
+        tint(0, 120, 255, 200); image(logoW, cx + ox + ca * 2.5, sy + sh / 2, lw, sh, 0, srcY, logoW.width, srcH);
+        tint(255, 255, 255, 250); image(logoW, cx + ox * 0.2, sy + sh / 2, lw, sh, 0, srcY, logoW.width, srcH);
       }
     } else {
-      tint(255,20,20,120); image(logoW, cx-ca, cy, lw, lh);
-      tint(0,255,0,120); image(logoW, cx, cy, lw, lh);
-      tint(40,100,255,120); image(logoW, cx+ca, cy, lw, lh);
-      tint(255,255,255,255); image(logoW, cx, cy, lw, lh);
+      tint(255, 20, 20, 120); image(logoW, cx - ca, cy, lw, lh);
+      tint(0, 255, 0, 120); image(logoW, cx, cy, lw, lh);
+      tint(40, 100, 255, 120); image(logoW, cx + ca, cy, lw, lh);
+      tint(255, 255, 255, 255); image(logoW, cx, cy, lw, lh);
     }
-    noTint(); pop();
+    noTint();
+    pop();
   }
 
-  // ═══════════════════════════════════════════════════
-  // L8: VIGNETTE + ATMOSPHERE
-  // ═══════════════════════════════════════════════════
   function layerVignette() {
     let ctx = drawingContext;
     ctx.save();
 
-    // Radial vignette (dark edges, cinematic)
-    let grd = ctx.createRadialGradient(width/2, height/2, width*0.25, width/2, height/2, width*0.75);
+    let grd = ctx.createRadialGradient(width / 2, height / 2, width * 0.25, width / 2, height / 2, width * 0.75);
     grd.addColorStop(0, 'rgba(0,0,0,0)');
     grd.addColorStop(0.6, 'rgba(0,0,0,0.15)');
-    grd.addColorStop(1, 'rgba(0,0,0,0.65)');
+    grd.addColorStop(1, 'rgba(0,0,0,0.7)');
     ctx.fillStyle = grd;
     ctx.fillRect(0, 0, width, height);
 
-    // Subtle scanlines
     ctx.strokeStyle = 'rgba(0,0,0,0.03)';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    for (let y = 0; y < height; y += 4) { ctx.moveTo(0,y); ctx.lineTo(width,y); }
+    for (let y = 0; y < height; y += 4) { ctx.moveTo(0, y); ctx.lineTo(width, y); }
     ctx.stroke();
 
-    // Chromatic edge tint (red left, blue right)
-    let eL = ctx.createLinearGradient(0,0,width*0.08,0);
-    eL.addColorStop(0, 'rgba(255,30,30,0.08)');
-    eL.addColorStop(1, 'rgba(255,30,30,0)');
+    let eL = ctx.createLinearGradient(0, 0, width * 0.08, 0);
+    eL.addColorStop(0, `rgba(${CR[0]},${CR[1]},${CR[2]},0.08)`);
+    eL.addColorStop(1, `rgba(${CR[0]},${CR[1]},${CR[2]},0)`);
     ctx.fillStyle = eL;
-    ctx.fillRect(0,0,width*0.08,height);
+    ctx.fillRect(0, 0, width * 0.08, height);
 
-    let eR = ctx.createLinearGradient(width,0,width*0.92,0);
-    eR.addColorStop(0, 'rgba(30,80,255,0.08)');
-    eR.addColorStop(1, 'rgba(30,80,255,0)');
+    let eR = ctx.createLinearGradient(width, 0, width * 0.92, 0);
+    eR.addColorStop(0, `rgba(${sceneMotion.accent[0]},${sceneMotion.accent[1]},${sceneMotion.accent[2]},0.1)`);
+    eR.addColorStop(1, `rgba(${sceneMotion.accent[0]},${sceneMotion.accent[1]},${sceneMotion.accent[2]},0)`);
     ctx.fillStyle = eR;
-    ctx.fillRect(width*0.92,0,width*0.08,height);
+    ctx.fillRect(width * 0.92, 0, width * 0.08, height);
 
     ctx.restore();
   }
 
-  // ═══════════════════════════════════════════════════
-  // INTERACTION
-  // ═══════════════════════════════════════════════════
-  function mousePressed() { burst(mouseX,mouseY); return false; }
-  function touchStarted() { if(touches.length>0)burst(touches[0].x,touches[0].y); return false; }
+  function pickBurstColor() {
+    const activeLane = LANES[activeLaneIndex];
+    const r = random();
+    if (r < 0.5) return activeLane.accent;
+    if (r < 0.74) return CT;
+    if (r < 0.9) return CP;
+    return CW;
+  }
 
-  function burst(bx, by) {
-    flash = 60;
-    warpSpeed = 3.5; // surge!
-    shakeX = random(-12, 12);
-    shakeY = random(-8, 8);
-    // Big burst
-    for (let i = 0; i < 80; i++) {
-      let a=random(TWO_PI), spd=random(3,12);
-      let c = random()<0.4?CR:(random()<0.6?CT:CP);
-      spawn(bx,by,cos(a)*spd,sin(a)*spd,c[0],c[1],c[2],random(3,9),floor(random(30,80)));
+  function burst(bx, by, intensity = 1) {
+    flash = max(flash, 60 * intensity);
+    burstWarp = max(burstWarp, 1 + 2.3 * intensity);
+    shakeX = random(-12, 12) * intensity;
+    shakeY = random(-8, 8) * intensity;
+    const ct = floor(72 * intensity + 8);
+    for (let i = 0; i < ct; i++) {
+      let a = random(TWO_PI), spd = random(3, 12) * (0.7 + intensity * 0.45);
+      let c = pickBurstColor();
+      spawn(bx, by, cos(a) * spd, sin(a) * spd, c[0], c[1], c[2], random(3, 9), floor(random(30, 80)));
     }
-    // Trigger glitch
     glitching = true;
-    glitchD = floor(random(5, 12));
+    glitchD = floor(random(4, 10));
+  }
+
+  function mousePressed(event) {
+    if (event && event.target && event.target.closest && event.target.closest('#hud')) return false;
+    burst(mouseX, mouseY, 1);
+    return false;
+  }
+
+  function touchStarted(event) {
+    if (event && event.target && event.target.closest && event.target.closest('#hud')) return false;
+    if (touches.length > 0) burst(touches[0].x, touches[0].y, 1);
+    return false;
+  }
+
+  function keyPressed() {
+    if (key >= '1' && key <= String(LANES.length)) {
+      activateLane(Number(key) - 1);
+      return false;
+    }
+    if (keyCode === LEFT_ARROW) {
+      const next = (focusLaneIndex !== null ? focusLaneIndex : activeLaneIndex) - 1;
+      previewLane((next + LANES.length) % LANES.length);
+      return false;
+    }
+    if (keyCode === RIGHT_ARROW) {
+      const next = (focusLaneIndex !== null ? focusLaneIndex : activeLaneIndex) + 1;
+      previewLane(next % LANES.length);
+      return false;
+    }
+    if (keyCode === ENTER || key === ' ') {
+      activateLane(focusLaneIndex !== null ? focusLaneIndex : activeLaneIndex);
+      return false;
+    }
   }
 
   function windowResized() {
     resizeCanvas(windowWidth, windowHeight);
-    for(let n of nodes){n.bx=random(width);n.by=random(height);}
+    for (let n of nodes) { n.bx = random(width); n.by = random(height); }
     cacheN();
   }
   </script>
